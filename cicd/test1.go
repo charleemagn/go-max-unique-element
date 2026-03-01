@@ -46,7 +46,7 @@ func checkOutput(outputFile, expectedText string) bool {
     fmt.Println("Файл вывода пуст")
     return false
   }
-  return tru
+  return true
 }
 
 func main() {
