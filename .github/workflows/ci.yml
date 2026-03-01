@@ -1,4 +1,4 @@
-name: CI Pipeline - Build Stage
+name: CI/CD Pipeline
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 
 jobs:
   RunMake:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -35,7 +35,7 @@ jobs:
 
   RunTest:
     needs: RunMake
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -56,7 +56,7 @@ jobs:
 
   RunPackage:
     needs: RunTest
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -68,11 +68,50 @@ jobs:
       - name: Build .deb package
         run: |
           mkdir -p DEBIAN
-          cp control DEBIAN/control  # Предполагаем, что control в корне
+          cp control DEBIAN/control
           dpkg-deb --build . go.deb
       - name: Upload .deb artifact
         uses: actions/upload-artifact@v4
         with:
           name: deb-package
           path: "go.deb"
+          retention-days: 1
+
+  test-docker:
+    needs: RunPackage
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Download deb package
+        uses: actions/download-artifact@v4
+        with:
+          name: deb-package
+          path: .
+      - name: Build Docker image
+        run: docker build -t myapp-test .
+      - name: Build Docker image with tag
+        run: docker build -t ${{ secrets.DOCKER_USERNAME }}/myapp:${{ github.sha }} .
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Push Docker image
+        run: |
+          docker push ${{ secrets.DOCKER_USERNAME }}/myapp:${{ github.sha }}
+          docker tag ${{ secrets.DOCKER_USERNAME }}/myapp:${{ github.sha }} ${{ secrets.DOCKER_USERNAME }}/myapp:latest
+          docker push ${{ secrets.DOCKER_USERNAME }}/myapp:latest
+      - name: Save Docker image to dist folder (локальный артефакт)
+        run: |
+          mkdir -p dist
+          docker save myapp-test:latest -o dist/myapp-container.tar
+          gzip -f dist/myapp-container.tar
+          echo "Локальный артефакт контейнера создан:"
+          ls -la dist/
+      - name: Upload container artifact to dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-image
+          path: dist/myapp-container.tar.gz
           retention-days: 1
