@@ -1,0 +1,8 @@
+Package: go
+Version: 1.0
+Section: utils
+Priority: optional
+Architecture: amd64
+Depends: golang-go
+Maintainer: yaros
+Description: Go.

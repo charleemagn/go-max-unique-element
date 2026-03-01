@@ -1,0 +1,78 @@
+name: CI Pipeline - Build Stage
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  RunMake:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y golang-go make
+      - name: Build program
+        run: |
+          make build
+          mkdir -p usr/bin
+          cp max_unique_element usr/bin/
+          chmod +x usr/bin/max_unique_element
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: built-program
+          path: usr/bin/max_unique_element
+          retention-days: 1
+
+  RunTest:
+    needs: RunMake
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: built-program
+          path: ./usr/bin
+      - run: chmod +x ./usr/bin/max_unique_element
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+      - name: Run tests
+        run: |
+          cd cicd
+          go run test1.go
+          go run test2.go
+          go run test3.go
+
+  RunPackage:
+    needs: RunTest
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Download binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: built-program
+          path: ./usr/bin
+      - name: Build .deb package
+        run: |
+          mkdir -p DEBIAN
+          cp control DEBIAN/control  # Предполагаем, что control в корне
+          dpkg-deb --build . go.deb
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-package
+          path: "go.deb"
+          retention-days: 1
